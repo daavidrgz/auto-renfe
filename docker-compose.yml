@@ -1,5 +1,10 @@
 services:
-  geckodriver:
-      image: instrumentisto/geckodriver
+  chromedriver:
+      image: selenium/standalone-chrome
+      ports:
+        - "4444:4444"
       shm_size: 2g
-      network_mode: host
+      environment:
+        - SE_NODE_MAX_SESSIONS=3
+        - SE_NODE_OVERRIDE_MAX_SESSIONS=true
+        - START_XVFB=false

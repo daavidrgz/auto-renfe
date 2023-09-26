@@ -6,9 +6,22 @@ pub struct RenfeScraper {
 
 impl RenfeScraper {
 	pub async fn new() -> Self {
-		let geckodriver_url = "http://localhost:4444";
+		let geckodriver_url = "http://localhost:4444/";
 		let renfe_url = "https://www.renfe.com/es/es";
-		let c = ClientBuilder::native().connect(geckodriver_url).await.expect("failed to connect to WebDriver");
+		let capabilities = serde_json::json!({
+			"browserName": "chrome",
+			"goog:chromeOptions": {
+				"args": [
+					"--headless",
+					"--disable-gpu",
+					"--no-sandbox",
+					"--disable-dev-shm-usage"
+				]
+			}
+		});
+		let c = ClientBuilder::native()
+		.capabilities(capabilities.as_object().unwrap().clone())
+		.connect(geckodriver_url).await.expect("failed to connect to WebDriver");
 		c.goto(renfe_url).await.expect("failed to load renfe.com");
 		Self {
 			client: c,
