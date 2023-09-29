@@ -1,6 +1,4 @@
-use scraper::RenfeScraper;
-
-pub mod scraper;
+use auto_renfe::scraper::RenfeScraper;
 
 #[tokio::main]
 async fn main() {
