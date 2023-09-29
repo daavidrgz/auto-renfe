@@ -30,33 +30,33 @@ impl RenfeScraper {
         Ok(Self { client: c })
     }
 
-    pub async fn find_trains(&mut self, search_filters: &SearchFilter) -> Result<(), Box<dyn Error>> {
-        c.goto(RENFE_URL).await?;
+    pub async fn find_trains(&mut self, search_filters: &SearchFilter<'_>) -> Result<(), Box<dyn Error>> {
+        self.client.goto(RENFE_URL).await?;
         self.search_stations(search_filters).await?;
         Ok(())
     }
     
-    pub async fn search_stations(&mut self, search_filters: &SearchFilter) -> Result<(), Box<dyn Error>> {
+    pub async fn search_stations(&mut self, search_filters: &SearchFilter<'_>) -> Result<(), Box<dyn Error>> {
         let origin_locator = Locator::Css("input#origin");
         let destination_locator = Locator::Css("input#destination");
         
         let origin_element = self.client.wait().for_element(origin_locator).await?;
         origin_element.click().await?;
-        origin_element.send_keys(search_filters).await?;
-        origin_element.send_keys().await?;
+        origin_element.send_keys(search_filters.get_origin()).await?;
+        origin_element.send_keys("").await?;
 
         self.client
             .wait()
             .for_element(destination_locator)
             .await?
-            .send_keys(destination)
+            .send_keys(search_filters.get_destination())
             .await?;
         Ok(())
     }
 
-    pub async fn search_dates(&mut self, search_filters: &SearchFilters) -> Result<(), Err> {
+    // pub async fn search_dates(&mut self, search_filters: &SearchFilters) -> Result<(), Err> {
 
-    }
+    // }
 
     pub async fn close(self) {
         self.client.close().await.expect("failed to close browser");

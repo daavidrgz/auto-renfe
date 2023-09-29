@@ -1,18 +1,16 @@
-use auto_renfe::scraper::RenfeScraper;
+use auto_renfe::scraper::{
+    constants::{SearchFilter, SearchFilterBuilder},
+    RenfeScraper,
+};
 
 #[tokio::main]
 async fn main() {
-    println!("scraper 1");
-    let mut scraper = RenfeScraper::new().await;
-    println!("scraper 2");
-    let mut scraper2 = RenfeScraper::new().await;
-    println!("scraper 3");
-    let mut scraper3 = RenfeScraper::new().await;
-
-    scraper.find_trains("Madrid", "Barcelona").await;
-    scraper2.find_trains("Madrid", "Barcelona").await;
-    scraper3.find_trains("Madrid", "Barcelona").await;
+    let mut scraper = RenfeScraper::new().await.expect("failed to create scraper");
+    let search_filters = SearchFilterBuilder::default()
+        .origin("MADRID")
+        .destination("SEVILLA")
+        .departure_date("2021-07-01")
+        .build().unwrap();
+    scraper.find_trains(&search_filters).await;
     scraper.close().await;
-    scraper2.close().await;
-    scraper3.close().await;
 }
