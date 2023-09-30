@@ -47,6 +47,7 @@ dependencies = [
  "dotenv_codegen",
  "dptree",
  "fantoccini",
+ "futures",
  "log",
  "pretty_env_logger",
  "serde_json",

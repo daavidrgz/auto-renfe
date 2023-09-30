@@ -1,14 +1,14 @@
 pub mod constants;
 
-use serde_json::{de, json};
 use std::error::Error;
 
 use constants::*;
 use fantoccini::{
-    actions::{self, ActionSequence, Actions, InputSource, KeyAction, KeyActions},
-    key::{self, Key},
+    actions::{InputSource, KeyAction, KeyActions},
+    key::Key,
     Client, ClientBuilder, Locator,
 };
+use futures::future::*;
 
 pub struct RenfeScraper {
     client: Client,
@@ -73,23 +73,32 @@ impl RenfeScraper {
         self.click_element_by_locator(Locator::Css("button[title=\"Buscar billete\"]"))
             .await?;
 
+        // Type the departure date
         self.send_keys_by_locator(
             Locator::Css("input#fechaSeleccionada0"),
             search_filters.get_departure_date(),
         )
         .await?;
 
+        // Wait for a train row to appear
         self.client
             .wait()
-            .for_element(Locator::Css("div.precio"))
+            .for_element(Locator::Css("tr.trayectoRow"))
             .await?;
 
-        // let departure_hours = self.client.find_all(Locator::Css("div.salida")).await?;
-        // let hours = departure_hours
-        //     .into_iter()
-        //     .map(|departure_hour| departure_hour.text())
-        //     .collect::<Vec<_>>();
-        // print!("departure_hours: {:?}", hours);
+        let departure_hours = self.client.find_all(Locator::Css("div.salida")).await?;
+        let result_hours = join_all(
+            departure_hours
+                .iter()
+                .map(|departure_hour| departure_hour.text()),
+        )
+        .await;
+
+        let hours = result_hours
+            .into_iter()
+            .map(|hour| hour.unwrap())
+            .collect::<Vec<_>>();
+        print!("departure_hours: {:?}", hours);
 
         Ok(())
     }
