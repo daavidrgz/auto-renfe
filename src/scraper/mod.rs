@@ -1,11 +1,12 @@
 pub mod constants;
 
+use serde_json::{de, json};
 use std::error::Error;
 
 use constants::*;
 use fantoccini::{
-    actions::{self, ActionSequence, InputSource, KeyAction, KeyActions},
-    key::Key,
+    actions::{self, ActionSequence, Actions, InputSource, KeyAction, KeyActions},
+    key::{self, Key},
     Client, ClientBuilder, Locator,
 };
 
@@ -47,38 +48,49 @@ impl RenfeScraper {
         &mut self,
         search_filters: &SearchFilter<'_>,
     ) -> Result<(), Box<dyn Error>> {
-        let origin_locator = Locator::Css("input#origin");
-        let destination_locator = Locator::Css("input#destination");
+        // Type the origin station
+        self.send_keys_by_locator(Locator::Css("input#origin"), search_filters.get_origin())
+            .await?;
+        // Select the first option and press enter
+        self.press_keys(vec![Key::Down, Key::Enter]).await?;
+        // Type the destination station
+        self.send_keys_by_locator(
+            Locator::Css("input#destination"),
+            search_filters.get_destination(),
+        )
+        .await?;
+        // Select the first option and press enter
+        self.press_keys(vec![Key::Down, Key::Enter]).await?;
 
-        let origin_element = self.client.wait().for_element(origin_locator).await?;
-        origin_element.click().await?;
-        origin_element
-            .send_keys(search_filters.get_origin())
+        // Click on the "sólo ida" or "ida y vuelta" button
+        self.click_element_by_locator(Locator::Css("button.menu-button"))
+            .await?;
+        // Click on the "sólo ida" button
+        self.click_element_by_locator(Locator::Css("button.rf-select__list-text"))
             .await?;
 
-        let key_actions = KeyActions::new("keys".to_string())
-            .then(KeyAction::Down {
-                value: Key::Down.into(),
-            })
-            .then(KeyAction::Up {
-                value: Key::Down.into(),
-            })
-            .then(KeyAction::Down {
-                value: Key::Enter.into(),
-            })
-            .then(KeyAction::Up {
-                value: Key::Enter.into(),
-            });
+        // Search
+        self.click_element_by_locator(Locator::Css("button[title=\"Buscar billete\"]"))
+            .await?;
 
-        self.client.perform_actions(key_actions).await?;
+        self.send_keys_by_locator(
+            Locator::Css("input#fechaSeleccionada0"),
+            search_filters.get_departure_date(),
+        )
+        .await?;
 
-        // Perform an action to simulate down and enter key
         self.client
             .wait()
-            .for_element(destination_locator)
-            .await?
-            .send_keys(search_filters.get_destination())
+            .for_element(Locator::Css("div.precio"))
             .await?;
+
+        // let departure_hours = self.client.find_all(Locator::Css("div.salida")).await?;
+        // let hours = departure_hours
+        //     .into_iter()
+        //     .map(|departure_hour| departure_hour.text())
+        //     .collect::<Vec<_>>();
+        // print!("departure_hours: {:?}", hours);
+
         Ok(())
     }
 
@@ -90,15 +102,36 @@ impl RenfeScraper {
         self.client.close().await.expect("failed to close browser");
     }
 
-    async fn press_keys(&mut self, keys: Vec<Key>) -> Result<(), Box<dyn Error>> {
-        keys.iter()
-            .map(|key| KeyAction::from(KeyAction::Down { value: key.into() }));
+    async fn send_keys_by_locator(
+        &mut self,
+        locator: Locator<'_>,
+        text: &str,
+    ) -> Result<(), Box<dyn Error>> {
+        let origin_element = self.client.wait().for_element(locator).await?;
+        origin_element.click().await?;
+        origin_element.send_keys(text).await?;
+        Ok(())
+    }
 
-        let key_actions = KeyActions::new("keys".to_string());
+    async fn click_element_by_locator(
+        &mut self,
+        locator: Locator<'_>,
+    ) -> Result<(), Box<dyn Error>> {
+        self.client
+            .wait()
+            .for_element(locator)
+            .await?
+            .click()
+            .await?;
+        Ok(())
+    }
+
+    async fn press_keys(&mut self, keys: Vec<Key>) -> Result<(), Box<dyn Error>> {
+        let mut key_actions = KeyActions::new("keys".to_string());
         for key in keys {
-            key_actions.then(KeyAction::Down { value: key.into() });
-            key_actions.then(KeyAction::Up { value: key.into() });
+            key_actions = key_actions.then(KeyAction::Down { value: key.into() });
         }
+        self.client.perform_actions(key_actions).await?;
         Ok(())
     }
 }
