@@ -10,15 +10,15 @@ pub struct SearchFilter<'a> {
 }
 
 impl SearchFilter<'_> {
-	pub fn get_origin(&self) -> &str {
-		self.origin
-	}
+    pub fn get_origin(&self) -> &str {
+        self.origin
+    }
 
-	pub fn get_destination(&self) -> &str {
-		self.destination
-	}
+    pub fn get_destination(&self) -> &str {
+        self.destination
+    }
 
-	pub fn get_departure_date(&self) -> &str {
-		self.departure_date
-	}
+    pub fn get_departure_date(&self) -> &str {
+        self.departure_date
+    }
 }

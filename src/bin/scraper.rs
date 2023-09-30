@@ -1,7 +1,4 @@
-use auto_renfe::scraper::{
-    constants::{SearchFilter, SearchFilterBuilder},
-    RenfeScraper,
-};
+use auto_renfe::scraper::{constants::SearchFilterBuilder, RenfeScraper};
 
 #[tokio::main]
 async fn main() {
@@ -10,7 +7,8 @@ async fn main() {
         .origin("MADRID")
         .destination("SEVILLA")
         .departure_date("2021-07-01")
-        .build().unwrap();
-    scraper.find_trains(&search_filters).await;
+        .build()
+        .unwrap();
+    let _ = scraper.find_trains(&search_filters).await;
     scraper.close().await;
 }
