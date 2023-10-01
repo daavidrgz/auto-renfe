@@ -7,6 +7,8 @@ pub struct SearchFilter<'a> {
     origin: &'a str,
     destination: &'a str,
     departure_date: &'a str,
+    min_departure_hour: &'a str,
+    max_departure_hour: &'a str,
 }
 
 impl SearchFilter<'_> {
@@ -20,5 +22,13 @@ impl SearchFilter<'_> {
 
     pub fn get_departure_date(&self) -> &str {
         self.departure_date
+    }
+
+    pub fn get_min_departure_hour(&self) -> &str {
+        self.min_departure_hour
+    }
+
+    pub fn get_max_departure_hour(&self) -> &str {
+        self.max_departure_hour
     }
 }

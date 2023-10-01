@@ -2,13 +2,16 @@ pub mod constants;
 
 use std::error::Error;
 
+use chrono::NaiveDate;
 use constants::*;
 use fantoccini::{
     actions::{InputSource, KeyAction, KeyActions},
+    elements::Element,
     key::Key,
     Client, ClientBuilder, Locator,
 };
 use futures::future::*;
+use tokio_stream::*;
 
 pub struct RenfeScraper {
     client: Client,
@@ -86,19 +89,11 @@ impl RenfeScraper {
             .for_element(Locator::Css("tr.trayectoRow"))
             .await?;
 
-        let departure_hours = self.client.find_all(Locator::Css("div.salida")).await?;
-        let result_hours = join_all(
-            departure_hours
-                .iter()
-                .map(|departure_hour| departure_hour.text()),
-        )
-        .await;
+        let available_trains = self.client.find_all(Locator::Css("tr.trayectoRow")).await?;
 
-        let hours = result_hours
-            .into_iter()
-            .map(|hour| hour.unwrap())
-            .collect::<Vec<_>>();
-        print!("departure_hours: {:?}", hours);
+        let filtered_trains = self
+            .filter_trains_by_departure_hour(&available_trains, search_filters)
+            .await?;
 
         Ok(())
     }
@@ -142,5 +137,55 @@ impl RenfeScraper {
         }
         self.client.perform_actions(key_actions).await?;
         Ok(())
+    }
+
+    async fn filter_trains_by_departure_hour(
+        &mut self,
+        all_trains: &[Element],
+        search_filters: &SearchFilter<'_>,
+    ) -> Result<Vec<Element>, Box<dyn Error>> {
+        let mut filtered_trains: Vec<Element> = Vec::new();
+
+        for train in all_trains {
+            let departure_hour = train.find(Locator::Css("div.salida")).await?;
+            let departure_hour_text = departure_hour.text().await?;
+
+            println!("departure_hour_text: {}", departure_hour_text);
+
+            let departure_hour_naive = NaiveDate::parse_from_str(
+                &format!(
+                    "{} {}",
+                    search_filters.get_departure_date(),
+                    departure_hour_text
+                ),
+                "%d/%m/%Y %H:%M",
+            )?;
+
+            let min_departure_hour_naive = NaiveDate::parse_from_str(
+                &format!(
+                    "{} {}",
+                    search_filters.get_departure_date(),
+                    search_filters.get_min_departure_hour()
+                ),
+                "%d/%m/%Y %H:%M",
+            )?;
+
+            let max_departure_hour_naive = NaiveDate::parse_from_str(
+                &format!(
+                    "{} {}",
+                    search_filters.get_departure_date(),
+                    search_filters.get_max_departure_hour()
+                ),
+                "%d/%m/%Y %H:%M",
+            )?;
+
+            if departure_hour_naive >= min_departure_hour_naive
+                && departure_hour_naive <= max_departure_hour_naive
+            {
+                filtered_trains.push(train.clone());
+            }
+        }
+
+        Ok(filtered_trains)
     }
 }

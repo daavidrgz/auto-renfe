@@ -7,6 +7,8 @@ async fn main() {
         .origin("SANTIAGO")
         .destination("PONTEVEDRA")
         .departure_date("30/10/2023")
+        .min_departure_hour("16:40")
+        .max_departure_hour("20:00")
         .build()
         .unwrap();
     let _ = scraper.find_trains(&search_filters).await;
