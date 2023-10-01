@@ -1,8 +1,9 @@
 pub mod constants;
+pub mod utils;
 
 use std::error::Error;
 
-use chrono::NaiveDate;
+use chrono::NaiveDateTime;
 use constants::*;
 use fantoccini::{
     actions::{InputSource, KeyAction, KeyActions},
@@ -10,8 +11,6 @@ use fantoccini::{
     key::Key,
     Client, ClientBuilder, Locator,
 };
-use futures::future::*;
-use tokio_stream::*;
 
 pub struct RenfeScraper {
     client: Client,
@@ -38,16 +37,21 @@ impl RenfeScraper {
         Ok(Self { client: c })
     }
 
+    pub async fn close(self) {
+        self.client.close().await.expect("failed to close browser");
+    }
+
     pub async fn find_trains(
         &mut self,
         search_filters: &SearchFilter<'_>,
     ) -> Result<(), Box<dyn Error>> {
         self.client.goto(RENFE_URL).await?;
         self.search_stations(search_filters).await?;
-        Ok(())
+        self.search_departure_date(search_filters).await?;
+        self.select_train(search_filters).await
     }
 
-    pub async fn search_stations(
+    async fn search_stations(
         &mut self,
         search_filters: &SearchFilter<'_>,
     ) -> Result<(), Box<dyn Error>> {
@@ -76,34 +80,19 @@ impl RenfeScraper {
         self.click_element_by_locator(Locator::Css("button[title=\"Buscar billete\"]"))
             .await?;
 
+        Ok(())
+    }
+
+    async fn search_departure_date(
+        &mut self,
+        search_filters: &SearchFilter<'_>,
+    ) -> Result<(), Box<dyn Error>> {
         // Type the departure date
         self.send_keys_by_locator(
             Locator::Css("input#fechaSeleccionada0"),
             search_filters.get_departure_date(),
         )
-        .await?;
-
-        // Wait for a train row to appear
-        self.client
-            .wait()
-            .for_element(Locator::Css("tr.trayectoRow"))
-            .await?;
-
-        let available_trains = self.client.find_all(Locator::Css("tr.trayectoRow")).await?;
-
-        let filtered_trains = self
-            .filter_trains_by_departure_hour(&available_trains, search_filters)
-            .await?;
-
-        Ok(())
-    }
-
-    // pub async fn search_dates(&mut self, search_filters: &SearchFilters) -> Result<(), Err> {
-
-    // }
-
-    pub async fn close(self) {
-        self.client.close().await.expect("failed to close browser");
+        .await
     }
 
     async fn send_keys_by_locator(
@@ -139,6 +128,24 @@ impl RenfeScraper {
         Ok(())
     }
 
+    async fn select_train(
+        &mut self,
+        search_filters: &SearchFilter<'_>,
+    ) -> Result<(), Box<dyn Error>> {
+        // Wait for a train row to appear
+        self.client
+            .wait()
+            .for_element(Locator::Css("tr.trayectoRow"))
+            .await?;
+
+        let available_trains = self.client.find_all(Locator::Css("tr.trayectoRow")).await?;
+
+        let filtered_trains = self
+            .filter_trains_by_departure_hour(&available_trains, search_filters)
+            .await?;
+        Ok(())
+    }
+
     async fn filter_trains_by_departure_hour(
         &mut self,
         all_trains: &[Element],
@@ -152,31 +159,19 @@ impl RenfeScraper {
 
             println!("departure_hour_text: {}", departure_hour_text);
 
-            let departure_hour_naive = NaiveDate::parse_from_str(
-                &format!(
-                    "{} {}",
-                    search_filters.get_departure_date(),
-                    departure_hour_text
-                ),
-                "%d/%m/%Y %H:%M",
+            let departure_hour_naive = utils::get_datetime_from_string(
+                search_filters.get_departure_date(),
+                &departure_hour_text.replace('.', ":"),
             )?;
 
-            let min_departure_hour_naive = NaiveDate::parse_from_str(
-                &format!(
-                    "{} {}",
-                    search_filters.get_departure_date(),
-                    search_filters.get_min_departure_hour()
-                ),
-                "%d/%m/%Y %H:%M",
+            let min_departure_hour_naive = utils::get_datetime_from_string(
+                search_filters.get_departure_date(),
+                search_filters.get_min_departure_hour(),
             )?;
 
-            let max_departure_hour_naive = NaiveDate::parse_from_str(
-                &format!(
-                    "{} {}",
-                    search_filters.get_departure_date(),
-                    search_filters.get_max_departure_hour()
-                ),
-                "%d/%m/%Y %H:%M",
+            let max_departure_hour_naive = utils::get_datetime_from_string(
+                search_filters.get_departure_date(),
+                search_filters.get_max_departure_hour(),
             )?;
 
             if departure_hour_naive >= min_departure_hour_naive
