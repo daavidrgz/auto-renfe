@@ -11,6 +11,6 @@ async fn main() {
         .max_departure_hour("20:00")
         .build()
         .unwrap();
-    let _ = scraper.find_trains(&search_filters).await;
+    let _ = scraper.buy_tickets(&search_filters).await;
     // scraper.close().await;
 }

@@ -1,16 +1,9 @@
 pub mod constants;
 pub mod utils;
 
-use std::error::Error;
-
-use chrono::NaiveDateTime;
 use constants::*;
-use fantoccini::{
-    actions::{InputSource, KeyAction, KeyActions},
-    elements::Element,
-    key::Key,
-    Client, ClientBuilder, Locator,
-};
+use fantoccini::{elements::Element, key::Key, Client, ClientBuilder, Locator};
+use std::error::Error;
 
 pub struct RenfeScraper {
     client: Client,
@@ -41,14 +34,14 @@ impl RenfeScraper {
         self.client.close().await.expect("failed to close browser");
     }
 
-    pub async fn find_trains(
+    pub async fn buy_tickets(
         &mut self,
         search_filters: &SearchFilter<'_>,
     ) -> Result<(), Box<dyn Error>> {
         self.client.goto(RENFE_URL).await?;
         self.search_stations(search_filters).await?;
         self.search_departure_date(search_filters).await?;
-        self.select_train(search_filters).await
+        self.select_trains(search_filters).await
     }
 
     async fn search_stations(
@@ -56,29 +49,40 @@ impl RenfeScraper {
         search_filters: &SearchFilter<'_>,
     ) -> Result<(), Box<dyn Error>> {
         // Type the origin station
-        self.send_keys_by_locator(Locator::Css("input#origin"), search_filters.get_origin())
-            .await?;
+        utils::send_keys_by_locator(
+            &mut self.client,
+            Locator::Css("input#origin"),
+            search_filters.get_origin(),
+        )
+        .await?;
         // Select the first option and press enter
-        self.press_keys(vec![Key::Down, Key::Enter]).await?;
+        utils::press_keys(&mut self.client, vec![Key::Down, Key::Enter]).await?;
         // Type the destination station
-        self.send_keys_by_locator(
+        utils::send_keys_by_locator(
+            &mut self.client,
             Locator::Css("input#destination"),
             search_filters.get_destination(),
         )
         .await?;
         // Select the first option and press enter
-        self.press_keys(vec![Key::Down, Key::Enter]).await?;
+        utils::press_keys(&mut self.client, vec![Key::Down, Key::Enter]).await?;
 
-        // Click on the "sólo ida" or "ida y vuelta" button
-        self.click_element_by_locator(Locator::Css("button.menu-button"))
+        // Click on the "sólo ida" or "ida y vuelta" dropdown
+        utils::click_element_by_locator(&mut self.client, Locator::Css("button.menu-button"))
             .await?;
         // Click on the "sólo ida" button
-        self.click_element_by_locator(Locator::Css("button.rf-select__list-text"))
-            .await?;
+        utils::click_element_by_locator(
+            &mut self.client,
+            Locator::Css("button.rf-select__list-text"),
+        )
+        .await?;
 
-        // Search
-        self.click_element_by_locator(Locator::Css("button[title=\"Buscar billete\"]"))
-            .await?;
+        // Click on the search button
+        utils::click_element_by_locator(
+            &mut self.client,
+            Locator::Css("button[title=\"Buscar billete\"]"),
+        )
+        .await?;
 
         Ok(())
     }
@@ -88,47 +92,15 @@ impl RenfeScraper {
         search_filters: &SearchFilter<'_>,
     ) -> Result<(), Box<dyn Error>> {
         // Type the departure date
-        self.send_keys_by_locator(
+        utils::send_keys_by_locator(
+            &mut self.client,
             Locator::Css("input#fechaSeleccionada0"),
             search_filters.get_departure_date(),
         )
         .await
     }
 
-    async fn send_keys_by_locator(
-        &mut self,
-        locator: Locator<'_>,
-        text: &str,
-    ) -> Result<(), Box<dyn Error>> {
-        let origin_element = self.client.wait().for_element(locator).await?;
-        origin_element.click().await?;
-        origin_element.send_keys(text).await?;
-        Ok(())
-    }
-
-    async fn click_element_by_locator(
-        &mut self,
-        locator: Locator<'_>,
-    ) -> Result<(), Box<dyn Error>> {
-        self.client
-            .wait()
-            .for_element(locator)
-            .await?
-            .click()
-            .await?;
-        Ok(())
-    }
-
-    async fn press_keys(&mut self, keys: Vec<Key>) -> Result<(), Box<dyn Error>> {
-        let mut key_actions = KeyActions::new("keys".to_string());
-        for key in keys {
-            key_actions = key_actions.then(KeyAction::Down { value: key.into() });
-        }
-        self.client.perform_actions(key_actions).await?;
-        Ok(())
-    }
-
-    async fn select_train(
+    async fn select_trains(
         &mut self,
         search_filters: &SearchFilter<'_>,
     ) -> Result<(), Box<dyn Error>> {
@@ -143,6 +115,24 @@ impl RenfeScraper {
         let filtered_trains = self
             .filter_trains_by_departure_hour(&available_trains, search_filters)
             .await?;
+
+        for trian in filtered_trains {
+            self.buy_ticket(&trian).await?;
+        }
+        Ok(())
+    }
+
+    async fn buy_ticket(&mut self, train: &Element) -> Result<(), Box<dyn Error>> {
+        // Select the train clicking on the train row button
+        train.find(Locator::Css("button")).await?.click().await?;
+
+        // Click in the "Seleccionar" button
+        utils::click_element_by_locator(
+            &mut self.client,
+            Locator::Css("button#buttonBannerContinuar"),
+        )
+        .await?;
+
         Ok(())
     }
 
