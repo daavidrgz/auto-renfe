@@ -9,6 +9,8 @@ use teloxide::{
     utils::command::BotCommands,
 };
 
+use self::menus::{show_menu, MainMenu};
+
 type MyDialogue = Dialogue<State, InMemStorage<State>>;
 type HandlerResult = Result<(), Box<dyn Error + Send + Sync>>;
 
@@ -70,7 +72,7 @@ fn schema() -> UpdateHandler<Box<dyn std::error::Error + Send + Sync + 'static>>
         .branch(
             case![State::Start]
                 .branch(case![Command::Help].endpoint(help))
-                .branch(case![Command::Menu].endpoint(menus::show_menu)),
+                .branch(case![Command::Menu].endpoint(show_menu::<MainMenu>)),
         )
         .branch(case![Command::Cancel].endpoint(cancel));
 
