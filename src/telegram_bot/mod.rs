@@ -1,10 +1,18 @@
 use std::error::Error;
 
 use dptree::{case, deps};
-use teloxide::{dispatching::dialogue::InMemStorage, prelude::*};
+
+use teloxide::{
+    dispatching::{dialogue, dialogue::InMemStorage, UpdateHandler},
+    prelude::*,
+    types::{InlineKeyboardButton, InlineKeyboardMarkup},
+    utils::command::BotCommands,
+};
 
 type MyDialogue = Dialogue<State, InMemStorage<State>>;
 type HandlerResult = Result<(), Box<dyn Error + Send + Sync>>;
+
+#[derive(Clone)]
 pub struct AutoRenfeBot {
     bot: Bot,
 }
@@ -14,19 +22,20 @@ pub enum State {
     #[default]
     Start,
     ReceiveFullName,
-    ReceiveAge {
+    ReceiveProductChoice {
         full_name: String,
-    },
-    ReceiveLocation {
-        full_name: String,
-        age: u8,
     },
 }
 
+impl Default for AutoRenfeBot {
+    fn default() -> Self {
+        Self::new()
+    }
+}
 impl AutoRenfeBot {
-    pub fn new(token: &str) -> Self {
+    pub fn new() -> Self {
         Self {
-            bot: Bot::new(token),
+            bot: Bot::from_env(),
         }
     }
 
@@ -34,92 +43,115 @@ impl AutoRenfeBot {
         pretty_env_logger::init();
         log::info!("Starting renfebot...");
 
-        let handler = Update::filter_message()
-            .enter_dialogue::<Message, InMemStorage<State>, State>()
-            .branch(case![State::Start].endpoint(start))
-            .branch(case![State::ReceiveFullName].endpoint(receive_full_name))
-            .branch(case![State::ReceiveAge { full_name }].endpoint(receive_age))
-            .branch(case![State::ReceiveLocation { full_name, age }].endpoint(receive_location));
-
-        Dispatcher::builder(self.bot, handler)
+        Dispatcher::builder(self.bot, schema())
             .dependencies(deps![InMemStorage::<State>::new()])
             .enable_ctrlc_handler()
             .build()
             .dispatch()
-            .await
+            .await;
     }
 }
 
-pub async fn start(bot: Bot, dialogue: MyDialogue, message: Message) -> HandlerResult {
-    bot.send_message(message.chat.id, "Hello! what is your name?")
+/// These commands are supported:
+#[derive(BotCommands, Clone)]
+#[command(rename_rule = "lowercase")]
+enum Command {
+    /// Display this text.
+    Help,
+    /// Start the purchase procedure.
+    Start,
+    /// Cancel the purchase procedure.
+    Cancel,
+}
+
+fn schema() -> UpdateHandler<Box<dyn std::error::Error + Send + Sync + 'static>> {
+    let command_handler = teloxide::filter_command::<Command, _>()
+        .branch(
+            case![State::Start]
+                .branch(case![Command::Help].endpoint(help))
+                .branch(case![Command::Start].endpoint(start)),
+        )
+        .branch(case![Command::Cancel].endpoint(cancel));
+
+    let message_handler = Update::filter_message()
+        .branch(command_handler)
+        .branch(case![State::ReceiveFullName].endpoint(receive_full_name))
+        .branch(dptree::endpoint(invalid_state));
+
+    let callback_query_handler = Update::filter_callback_query().branch(
+        case![State::ReceiveProductChoice { full_name }].endpoint(receive_product_selection),
+    );
+
+    dialogue::enter::<Update, InMemStorage<State>, State, _>()
+        .branch(message_handler)
+        .branch(callback_query_handler)
+}
+
+async fn start(bot: Bot, dialogue: MyDialogue, msg: Message) -> HandlerResult {
+    bot.send_message(msg.chat.id, "Let's start! What's your full name?")
         .await?;
     dialogue.update(State::ReceiveFullName).await?;
     Ok(())
 }
 
-pub async fn receive_full_name(bot: Bot, dialogue: MyDialogue, message: Message) -> HandlerResult {
-    match message.text() {
-        Some(text) => {
-            bot.send_message(message.chat.id, "How old are you?")
-                .await?;
-            dialogue
-                .update(State::ReceiveAge {
-                    full_name: text.to_string(),
-                })
-                .await?;
-        }
-        None => {
-            bot.send_message(message.chat.id, "Please, send me a text")
-                .await?;
-        }
-    }
+async fn help(bot: Bot, msg: Message) -> HandlerResult {
+    bot.send_message(msg.chat.id, Command::descriptions().to_string())
+        .await?;
     Ok(())
 }
 
-pub async fn receive_age(
-    bot: Bot,
-    dialogue: MyDialogue,
-    full_name: String,
-    message: Message,
-) -> HandlerResult {
-    match message.text().map(|text| text.parse::<u8>()) {
-        Some(Ok(age)) => {
-            bot.send_message(message.chat.id, "Where are you from?")
-                .await?;
-            dialogue
-                .update(State::ReceiveLocation { full_name, age })
-                .await?;
-        }
-        _ => {
-            bot.send_message(message.chat.id, "Please, send me a number")
-                .await?;
-        }
-    }
+async fn cancel(bot: Bot, dialogue: MyDialogue, msg: Message) -> HandlerResult {
+    bot.send_message(msg.chat.id, "Cancelling the dialogue.")
+        .await?;
+    dialogue.exit().await?;
     Ok(())
 }
 
-pub async fn receive_location(
-    bot: Bot,
-    dialogue: MyDialogue,
-    (full_name, age): (String, u8),
-    message: Message,
-) -> HandlerResult {
-    match message.text() {
-        Some(location) => {
-            bot.send_message(
-                message.chat.id,
-                format!(
-                    "Your name is {}, you are {} years old and you are from {}",
-                    full_name, age, location
-                ),
-            )
-            .await?;
-            dialogue.exit().await?;
+async fn invalid_state(bot: Bot, msg: Message) -> HandlerResult {
+    bot.send_message(
+        msg.chat.id,
+        "Unable to handle the message. Type /help to see the usage.",
+    )
+    .await?;
+    Ok(())
+}
+
+async fn receive_full_name(bot: Bot, dialogue: MyDialogue, msg: Message) -> HandlerResult {
+    match msg.text().map(ToOwned::to_owned) {
+        Some(full_name) => {
+            let products = ["Apple", "Banana", "Orange", "Potato"]
+                .map(|product| InlineKeyboardButton::callback(product, product));
+
+            bot.send_message(msg.chat.id, "Select a product:")
+                .reply_markup(InlineKeyboardMarkup::new([products]))
+                .await?;
+            dialogue
+                .update(State::ReceiveProductChoice { full_name })
+                .await?;
         }
         None => {
-            bot.send_message(message.chat.id, "Please, send me a text")
+            bot.send_message(msg.chat.id, "Please, send me your full name.")
                 .await?;
         }
     }
+
+    Ok(())
+}
+
+async fn receive_product_selection(
+    bot: Bot,
+    dialogue: MyDialogue,
+    full_name: String, // Available from `State::ReceiveProductChoice`.
+    q: CallbackQuery,
+) -> HandlerResult {
+    if let Some(product) = &q.data {
+        bot.send_message(
+            dialogue.chat_id(),
+            format!("{full_name}, product '{product}' has been purchased successfully!"),
+        )
+        .await?;
+        dialogue.exit().await?;
+    }
+
     Ok(())
 }
