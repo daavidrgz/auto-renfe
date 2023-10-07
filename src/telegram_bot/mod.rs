@@ -1,19 +1,20 @@
 use std::error::Error;
 
-use dptree::{case, deps, filter};
+use dptree::{case, deps};
 
 use teloxide::{
     dispatching::{dialogue, dialogue::InMemStorage, DpHandlerDescription, UpdateHandler},
     prelude::*,
-    types::{InlineKeyboardButton, InlineKeyboardMarkup},
     utils::command::BotCommands,
 };
 
-use self::menus::{MainMenu, Menu};
+use menus::{Menu, MenuEvent};
+
+use self::menus::MainMenuEvent;
 
 type MyDialogue = Dialogue<State, InMemStorage<State>>;
 type HandlerResult = Result<(), Box<dyn Error + Send + Sync>>;
-
+type MyHandler = Handler<'static, DependencyMap, HandlerResult, DpHandlerDescription>;
 pub mod menus;
 
 #[derive(Clone)]
@@ -47,6 +48,7 @@ impl AutoRenfeBot {
             .dependencies(deps![InMemStorage::<State>::new()])
             .enable_ctrlc_handler()
             .build()
+            // TODO: use dispatch_with_listener
             .dispatch()
             .await;
     }
@@ -72,10 +74,7 @@ fn schema() -> UpdateHandler<Box<dyn std::error::Error + Send + Sync + 'static>>
         .branch(
             case![State::Start]
                 .branch(case![Command::Help].endpoint(help))
-                .branch(
-                    case![Command::Menu]
-                        .endpoint(MainMenu::show_menu),
-                ),
+                .branch(case![Command::Menu].endpoint(MainMenuEvent::show_menu)),
         )
         .branch(case![Command::Cancel].endpoint(cancel));
 
@@ -84,7 +83,7 @@ fn schema() -> UpdateHandler<Box<dyn std::error::Error + Send + Sync + 'static>>
         // .branch(case![State::ReceiveFullName].endpoint(receive_full_name))
         .branch(dptree::endpoint(invalid_state));
 
-    let callback_query_handler = Update::filter_callback_query().branch(menus::schema());
+    let callback_query_handler = Update::filter_callback_query().branch(MenuEvent::schema());
 
     dialogue::enter::<Update, InMemStorage<State>, State, _>()
         .branch(message_handler)

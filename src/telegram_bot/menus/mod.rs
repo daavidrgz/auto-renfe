@@ -1,35 +1,29 @@
-use super::{HandlerResult, MyDialogue};
+use super::{HandlerResult, MyHandler};
+use anyhow::anyhow;
 use async_trait::async_trait;
-use dptree::{entry, filter_map};
+use dptree::entry;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
-use serde_prefix::prefix_all;
-use teloxide::dispatching::DpHandlerDescription;
 use teloxide::prelude::*;
-use teloxide::types::{Chat, InlineKeyboardButton, InlineKeyboardMarkup};
+use teloxide::types::{InlineKeyboardButton, InlineKeyboardMarkup};
 
 #[async_trait]
 pub trait Menu
 where
-    Self: 'static,
+    Self: DeserializeOwned + Send + Clone + Sync + 'static + Into<MenuEvent>,
+    MenuEvent: From<Self>,
 {
-    type Event: Serialize + DeserializeOwned + Clone + Send + Sync + 'static;
     fn menu_keyboard() -> InlineKeyboardMarkup {
         let menu_items = Self::menu_items().iter().map(|item| {
+            let button_name = item.0;
+            let event = &item.1;
+            let menu_event = MenuEvent::from(event.clone());
+
             [InlineKeyboardButton::callback(
-                item.0,
-                serde_json::to_string(&item.1).unwrap(),
+                button_name,
+                serde_json::to_string(&menu_event).unwrap(),
             )]
         });
         InlineKeyboardMarkup::new(menu_items)
-    }
-
-    fn filter_event() -> Handler<'static, DependencyMap, HandlerResult, DpHandlerDescription> {
-        filter_map(|q: CallbackQuery| {
-            let data = q.data?;
-            let event = serde_json::from_str::<Self::Event>(&data);
-            event.ok()
-        })
-        .endpoint(Self::handle)
     }
 
     async fn show_menu(bot: Bot, msg: Message) -> HandlerResult {
@@ -47,80 +41,105 @@ where
         Ok(())
     }
 
-    fn menu_items<'a>() -> &'a [(&'a str, Self::Event)];
-    async fn handle(bot: Bot, q: CallbackQuery, event: Self::Event) -> HandlerResult;
+    fn menu_items<'a>() -> &'a [(&'a str, Self)];
+    async fn handle(&self, bot: Bot, q: CallbackQuery) -> HandlerResult;
 }
 
-pub struct MainMenu {}
 #[derive(Serialize, Deserialize, Clone, Copy)]
-#[prefix_all("MainMenuEvent_")]
+pub enum MenuEvent {
+    MainMenuEvent(MainMenuEvent),
+    AccountMenuEvent(AccountMenuEvent),
+}
+
+impl MenuEvent {
+    pub async fn handle(self, bot: Bot, q: CallbackQuery) -> HandlerResult {
+        match self {
+            MenuEvent::MainMenuEvent(event) => event.handle(bot, q).await,
+            MenuEvent::AccountMenuEvent(event) => event.handle(bot, q).await,
+        }
+    }
+
+    pub fn schema() -> MyHandler {
+        entry()
+            .filter_map(|q: CallbackQuery| {
+                let data = q.data?;
+                let event = serde_json::from_str::<Self>(&data);
+                event.ok()
+            })
+            .endpoint(Self::handle)
+    }
+}
+
+impl From<MainMenuEvent> for MenuEvent {
+    fn from(event: MainMenuEvent) -> Self {
+        Self::MainMenuEvent(event)
+    }
+}
+
+impl From<AccountMenuEvent> for MenuEvent {
+    fn from(event: AccountMenuEvent) -> Self {
+        Self::AccountMenuEvent(event)
+    }
+}
+
+#[derive(Serialize, Deserialize, Clone, Copy)]
 pub enum MainMenuEvent {
     OpenAccountMenu,
     OpenPurchaseMenu,
 }
 
-pub struct AccountMenu {}
-#[derive(Serialize, Deserialize, Clone, Copy)]
-#[prefix_all("AccountMenuEvent_")]
-pub enum AccountMenuEvent {
-    Login,
-    Info,
-    Back,
-}
-
-pub fn schema() -> Handler<'static, DependencyMap, HandlerResult, DpHandlerDescription> {
-    entry()
-        .branch(MainMenu::filter_event())
-        .branch(AccountMenu::filter_event())
-}
-
 #[async_trait]
-impl Menu for MainMenu {
-    type Event = MainMenuEvent;
-
-    fn menu_items<'a>() -> &'a [(&'a str, Self::Event)] {
+impl Menu for MainMenuEvent {
+    fn menu_items<'a>() -> &'a [(&'a str, Self)] {
         &[
-            ("Account", MainMenuEvent::OpenAccountMenu),
-            ("Purchase", MainMenuEvent::OpenPurchaseMenu),
+            ("Account", Self::OpenAccountMenu),
+            ("Purchase", Self::OpenPurchaseMenu),
         ]
     }
 
-    async fn handle(bot: Bot, q: CallbackQuery, event: Self::Event) -> HandlerResult {
-        match event {
-            MainMenuEvent::OpenAccountMenu => {
-                AccountMenu::show_menu_in_message(bot, q.message.unwrap()).await?;
+    async fn handle(&self, bot: Bot, q: CallbackQuery) -> HandlerResult {
+        let original_message = q.message.ok_or(anyhow!("No message"))?;
+        let chat_id = original_message.chat.id;
+        match self {
+            Self::OpenAccountMenu => {
+                AccountMenuEvent::show_menu_in_message(bot, original_message).await?;
             }
-            MainMenuEvent::OpenPurchaseMenu => {
-                bot.send_message(q.message.unwrap().chat.id, "Purchase menu")
-                    .await?;
+            Self::OpenPurchaseMenu => {
+                bot.send_message(chat_id, "Purchase menu").await?;
             }
         }
         Ok(())
     }
 }
 
+#[derive(Serialize, Deserialize, Clone, Copy)]
+pub enum AccountMenuEvent {
+    Login,
+    Info,
+    Back,
+}
+
 #[async_trait]
-impl Menu for AccountMenu {
-    type Event = AccountMenuEvent;
-    fn menu_items<'a>() -> &'a [(&'a str, Self::Event)] {
+impl Menu for AccountMenuEvent {
+    fn menu_items<'a>() -> &'a [(&'a str, Self)] {
         &[
-            ("Login", AccountMenuEvent::Login),
-            ("Info", AccountMenuEvent::Info),
-            ("Back", AccountMenuEvent::Back),
+            ("Login", Self::Login),
+            ("Info", Self::Info),
+            ("Back", Self::Back),
         ]
     }
-    async fn handle(bot: Bot, q: CallbackQuery, event: Self::Event) -> HandlerResult {
-        match event {
-            AccountMenuEvent::Login => {
-                bot.send_message(q.message.unwrap().chat.id, "Login menu")
-                    .await?;
+    async fn handle(&self, bot: Bot, q: CallbackQuery) -> HandlerResult {
+        let original_message = q.message.ok_or(anyhow!("No message"))?;
+        let chat_id = original_message.chat.id;
+        match self {
+            Self::Login => {
+                bot.send_message(chat_id, "Login menu").await?;
             }
-            AccountMenuEvent::Info => {
-                bot.send_message(q.message.unwrap().chat.id, "Info menu")
-                    .await?;
+            Self::Info => {
+                bot.send_message(chat_id, "Info menu").await?;
             }
-            AccountMenuEvent::Back => {
-                MainMenu::show_menu_in_message(bot, q.message.unwrap()).await?;
+            Self::Back => {
+                MainMenuEvent::show_menu_in_message(bot, original_message).await?;
             }
         }
         Ok(())
