@@ -1,4 +1,5 @@
-use super::{HandlerResult, MyHandler};
+use super::dialogues::account::login::LoginDialogueState;
+use super::{MyDialogue, MyHandler, MyHandlerResult};
 use anyhow::anyhow;
 use async_trait::async_trait;
 use dptree::entry;
@@ -26,7 +27,7 @@ where
         InlineKeyboardMarkup::new(menu_items)
     }
 
-    async fn show_menu(bot: Bot, msg: Message) -> HandlerResult {
+    async fn show_menu(bot: Bot, msg: Message) -> MyHandlerResult {
         // Msg is the message that originated the action
         bot.send_message(msg.chat.id, "Select an option:")
             .reply_markup(Self::menu_keyboard())
@@ -34,7 +35,7 @@ where
         Ok(())
     }
 
-    async fn show_menu_in_message(bot: Bot, msg: Message) -> HandlerResult {
+    async fn show_menu_in_message(bot: Bot, msg: Message) -> MyHandlerResult {
         bot.edit_message_reply_markup(msg.chat.id, msg.id)
             .reply_markup(Self::menu_keyboard())
             .await?;
@@ -42,7 +43,7 @@ where
     }
 
     fn menu_items<'a>() -> &'a [(&'a str, Self)];
-    async fn handle(&self, bot: Bot, q: CallbackQuery) -> HandlerResult;
+    async fn handle(&self, bot: Bot, q: CallbackQuery, dialogue: MyDialogue) -> MyHandlerResult;
 }
 
 #[derive(Serialize, Deserialize, Clone, Copy)]
@@ -52,10 +53,10 @@ pub enum MenuEvent {
 }
 
 impl MenuEvent {
-    pub async fn handle(self, bot: Bot, q: CallbackQuery) -> HandlerResult {
+    pub async fn handle(self, bot: Bot, q: CallbackQuery, dialogue: MyDialogue) -> MyHandlerResult {
         match self {
-            MenuEvent::MainMenuEvent(event) => event.handle(bot, q).await,
-            MenuEvent::AccountMenuEvent(event) => event.handle(bot, q).await,
+            MenuEvent::MainMenuEvent(event) => event.handle(bot, q, dialogue).await,
+            MenuEvent::AccountMenuEvent(event) => event.handle(bot, q, dialogue).await,
         }
     }
 
@@ -97,7 +98,7 @@ impl Menu for MainMenuEvent {
         ]
     }
 
-    async fn handle(&self, bot: Bot, q: CallbackQuery) -> HandlerResult {
+    async fn handle(&self, bot: Bot, q: CallbackQuery, _dialogue: MyDialogue) -> MyHandlerResult {
         let original_message = q.message.ok_or(anyhow!("No message"))?;
         let chat_id = original_message.chat.id;
         match self {
@@ -128,12 +129,12 @@ impl Menu for AccountMenuEvent {
             ("Back", Self::Back),
         ]
     }
-    async fn handle(&self, bot: Bot, q: CallbackQuery) -> HandlerResult {
+    async fn handle(&self, bot: Bot, q: CallbackQuery, dialogue: MyDialogue) -> MyHandlerResult {
         let original_message = q.message.ok_or(anyhow!("No message"))?;
         let chat_id = original_message.chat.id;
         match self {
             Self::Login => {
-                bot.send_message(chat_id, "Login menu").await?;
+                LoginDialogueState::start(bot, dialogue, original_message).await?;
             }
             Self::Info => {
                 bot.send_message(chat_id, "Info menu").await?;

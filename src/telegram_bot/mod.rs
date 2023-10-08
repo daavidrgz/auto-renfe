@@ -1,31 +1,38 @@
+use self::{dialogues::DialogueState, menus::MainMenuEvent};
+use dptree::{case, deps, entry};
+use menus::{Menu, MenuEvent};
 use std::error::Error;
-
-use dptree::{case, deps};
-
 use teloxide::{
     dispatching::{dialogue, dialogue::InMemStorage, DpHandlerDescription, UpdateHandler},
     prelude::*,
     utils::command::BotCommands,
 };
 
-use menus::{Menu, MenuEvent};
+type MyDialogue = Dialogue<GlobalState, InMemStorage<GlobalState>>;
+type MyHandlerResult = Result<(), Box<dyn Error + Send + Sync>>;
+type MyHandler = Handler<'static, DependencyMap, MyHandlerResult, DpHandlerDescription>;
 
-use self::menus::MainMenuEvent;
-
-type MyDialogue = Dialogue<State, InMemStorage<State>>;
-type HandlerResult = Result<(), Box<dyn Error + Send + Sync>>;
-type MyHandler = Handler<'static, DependencyMap, HandlerResult, DpHandlerDescription>;
+pub mod dialogues;
 pub mod menus;
-
 #[derive(Clone)]
 pub struct AutoRenfeBot {
     bot: Bot,
 }
 
 #[derive(Clone, Default)]
-pub enum State {
+pub enum GlobalState {
     #[default]
     Start,
+    InDialogue(DialogueState),
+}
+
+impl<T> From<T> for GlobalState
+where
+    T: Into<DialogueState>,
+{
+    fn from(state: T) -> Self {
+        Self::InDialogue(state.into())
+    }
 }
 
 impl Default for AutoRenfeBot {
@@ -45,7 +52,7 @@ impl AutoRenfeBot {
         log::info!("Starting renfebot...");
 
         Dispatcher::builder(self.bot, schema())
-            .dependencies(deps![InMemStorage::<State>::new()])
+            .dependencies(deps![InMemStorage::<GlobalState>::new()])
             .enable_ctrlc_handler()
             .build()
             // TODO: use dispatch_with_listener
@@ -72,38 +79,40 @@ enum Command {
 fn schema() -> UpdateHandler<Box<dyn std::error::Error + Send + Sync + 'static>> {
     let command_handler = teloxide::filter_command::<Command, _>()
         .branch(
-            case![State::Start]
+            case![GlobalState::Start]
                 .branch(case![Command::Help].endpoint(help))
                 .branch(case![Command::Menu].endpoint(MainMenuEvent::show_menu)),
         )
         .branch(case![Command::Cancel].endpoint(cancel));
 
+    let dialogue_handler = case![GlobalState::InDialogue(dialogue)].chain(DialogueState::schema());
+
     let message_handler = Update::filter_message()
         .branch(command_handler)
-        // .branch(case![State::ReceiveFullName].endpoint(receive_full_name))
+        .branch(dialogue_handler)
         .branch(dptree::endpoint(invalid_state));
 
     let callback_query_handler = Update::filter_callback_query().branch(MenuEvent::schema());
 
-    dialogue::enter::<Update, InMemStorage<State>, State, _>()
+    dialogue::enter::<Update, InMemStorage<GlobalState>, GlobalState, _>()
         .branch(message_handler)
         .branch(callback_query_handler)
 }
 
-async fn help(bot: Bot, msg: Message) -> HandlerResult {
+async fn help(bot: Bot, msg: Message) -> MyHandlerResult {
     bot.send_message(msg.chat.id, Command::descriptions().to_string())
         .await?;
     Ok(())
 }
 
-async fn cancel(bot: Bot, dialogue: MyDialogue, msg: Message) -> HandlerResult {
+async fn cancel(bot: Bot, dialogue: MyDialogue, msg: Message) -> MyHandlerResult {
     bot.send_message(msg.chat.id, "Cancelling the dialogue.")
         .await?;
     dialogue.exit().await?;
     Ok(())
 }
 
-async fn invalid_state(bot: Bot, msg: Message) -> HandlerResult {
+async fn invalid_state(bot: Bot, msg: Message) -> MyHandlerResult {
     bot.send_message(
         msg.chat.id,
         "Unable to handle the message. Type /help to see the usage.",
