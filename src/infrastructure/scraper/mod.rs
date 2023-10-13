@@ -1,16 +1,17 @@
 pub mod constants;
 pub mod utils;
 
+use crate::Result;
 use constants::*;
 use fantoccini::{elements::Element, key::Key, Client, ClientBuilder, Locator};
-use std::error::Error;
+
 
 pub struct RenfeScraper {
     client: Client,
 }
 
 impl RenfeScraper {
-    pub async fn new() -> Result<Self, Box<dyn Error>> {
+    pub async fn new() -> Result<Self> {
         let chromedriver_url = "http://localhost:9515/";
         let capabilities = serde_json::json!({
             "browserName": "chrome",
@@ -34,20 +35,14 @@ impl RenfeScraper {
         self.client.close().await.expect("failed to close browser");
     }
 
-    pub async fn buy_tickets(
-        &mut self,
-        search_filters: &SearchFilter<'_>,
-    ) -> Result<(), Box<dyn Error>> {
+    pub async fn buy_tickets(&mut self, search_filters: &SearchFilter<'_>) -> Result<()> {
         self.client.goto(RENFE_URL).await?;
         self.search_stations(search_filters).await?;
         self.search_departure_date(search_filters).await?;
         self.select_trains(search_filters).await
     }
 
-    async fn search_stations(
-        &mut self,
-        search_filters: &SearchFilter<'_>,
-    ) -> Result<(), Box<dyn Error>> {
+    async fn search_stations(&mut self, search_filters: &SearchFilter<'_>) -> Result<()> {
         // Type the origin station
         utils::send_keys_by_locator(
             &mut self.client,
@@ -87,10 +82,7 @@ impl RenfeScraper {
         Ok(())
     }
 
-    async fn search_departure_date(
-        &mut self,
-        search_filters: &SearchFilter<'_>,
-    ) -> Result<(), Box<dyn Error>> {
+    async fn search_departure_date(&mut self, search_filters: &SearchFilter<'_>) -> Result<()> {
         // Type the departure date
         utils::send_keys_by_locator(
             &mut self.client,
@@ -100,10 +92,7 @@ impl RenfeScraper {
         .await
     }
 
-    async fn select_trains(
-        &mut self,
-        search_filters: &SearchFilter<'_>,
-    ) -> Result<(), Box<dyn Error>> {
+    async fn select_trains(&mut self, search_filters: &SearchFilter<'_>) -> Result<()> {
         // Wait for a train row to appear
         self.client
             .wait()
@@ -122,7 +111,7 @@ impl RenfeScraper {
         Ok(())
     }
 
-    async fn buy_ticket(&mut self, train: &Element) -> Result<(), Box<dyn Error>> {
+    async fn buy_ticket(&mut self, train: &Element) -> Result<()> {
         // Select the train clicking on the train row button
         train.find(Locator::Css("button")).await?.click().await?;
 
@@ -140,7 +129,7 @@ impl RenfeScraper {
         &mut self,
         all_trains: &[Element],
         search_filters: &SearchFilter<'_>,
-    ) -> Result<Vec<Element>, Box<dyn Error>> {
+    ) -> Result<Vec<Element>> {
         let mut filtered_trains: Vec<Element> = Vec::new();
 
         for train in all_trains {

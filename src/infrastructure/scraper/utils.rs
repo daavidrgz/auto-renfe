@@ -1,5 +1,3 @@
-use std::error::Error;
-
 use chrono::{NaiveDateTime, ParseError};
 use fantoccini::{
     actions::{InputSource, KeyAction, KeyActions},
@@ -8,14 +6,13 @@ use fantoccini::{
 };
 
 pub async fn click_element_by_locator(
-    client: &mut Client,
-    locator: Locator<'_>,
-) -> Result<(), Box<dyn Error>> {
-    client.wait().for_element(locator).await?.click().await?;
+    _client: &mut Client,
+    _locator: Locator<'_>,
+) -> crate::Result<()> {
     Ok(())
 }
 
-pub async fn press_keys(client: &mut Client, keys: Vec<Key>) -> Result<(), Box<dyn Error>> {
+pub async fn press_keys(client: &mut Client, keys: Vec<Key>) -> crate::Result<()> {
     let mut key_actions = KeyActions::new("keys".to_string());
     for key in keys {
         key_actions = key_actions.then(KeyAction::Down { value: key.into() });
@@ -28,7 +25,7 @@ pub async fn send_keys_by_locator(
     client: &mut Client,
     locator: Locator<'_>,
     text: &str,
-) -> Result<(), Box<dyn Error>> {
+) -> crate::Result<()> {
     let origin_element = client.wait().for_element(locator).await?;
     origin_element.click().await?;
     origin_element.send_keys(text).await?;

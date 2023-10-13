@@ -1,5 +1,6 @@
 use self::{dialogues::DialogueState, menus::MainMenuEvent};
-use dptree::{case, deps, entry};
+use crate::Result;
+use dptree::{case, deps};
 use menus::{Menu, MenuEvent};
 use std::error::Error;
 use teloxide::{
@@ -9,7 +10,7 @@ use teloxide::{
 };
 
 type MyDialogue = Dialogue<GlobalState, InMemStorage<GlobalState>>;
-type MyHandlerResult = Result<(), Box<dyn Error + Send + Sync>>;
+type MyHandlerResult = Result<()>;
 type MyHandler = Handler<'static, DependencyMap, MyHandlerResult, DpHandlerDescription>;
 
 pub mod dialogues;
@@ -76,7 +77,7 @@ enum Command {
 // TODO: hacer esto con un enum que represente las opciones de un menu
 // e intentar parsear...
 
-fn schema() -> UpdateHandler<Box<dyn std::error::Error + Send + Sync + 'static>> {
+fn schema() -> UpdateHandler<Box<dyn Error + Send + Sync + 'static>> {
     let command_handler = teloxide::filter_command::<Command, _>()
         .branch(
             case![GlobalState::Start]

@@ -1,10 +1,16 @@
 services:
   chromedriver:
-      image: selenium/standalone-chrome
-      ports:
-        - "4444:4444"
-      shm_size: 2g
-      environment:
-        - SE_NODE_MAX_SESSIONS=3
-        - SE_NODE_OVERRIDE_MAX_SESSIONS=true
-        - START_XVFB=false
+    image: selenium/standalone-chrome
+    ports:
+      - "4444:4444"
+    shm_size: 2g
+    environment:
+      - SE_NODE_MAX_SESSIONS=3
+      - SE_NODE_OVERRIDE_MAX_SESSIONS=true
+      - START_XVFB=false
+  mongodb:
+    image: mongo
+    ports:
+      - 27017:27017
+    volumes:
+      - ./data/mongodb:/data/db

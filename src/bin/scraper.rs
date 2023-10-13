@@ -1,4 +1,4 @@
-use auto_renfe::scraper::{constants::SearchFilterBuilder, RenfeScraper};
+use auto_renfe::infrastructure::scraper::{constants::SearchFilterBuilder, RenfeScraper};
 
 #[tokio::main]
 async fn main() {
