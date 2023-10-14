@@ -5,7 +5,6 @@ use crate::Result;
 use constants::*;
 use fantoccini::{elements::Element, key::Key, Client, ClientBuilder, Locator};
 
-
 pub struct RenfeScraper {
     client: Client,
 }

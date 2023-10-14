@@ -1,6 +1,6 @@
 use derive_builder::Builder;
 
-pub const RENFE_URL: &str = "https://www.renfe.com/es/es";
+pub const RENFE_LOGIN_URL: &str = "https://venta.renfe.com/vol/loginCEX.do";
 
 #[derive(Default, Builder, Debug)]
 pub struct SearchFilter<'a> {
