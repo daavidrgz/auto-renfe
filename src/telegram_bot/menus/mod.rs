@@ -1,4 +1,7 @@
+use crate::infrastructure::repositories::user_repository::UserRepository;
+
 use super::dialogues::account::login::LoginDialogueState;
+use super::dialogues::purchase::PurchaseDialogueState;
 use super::{MyDialogue, MyHandler, MyHandlerResult};
 use anyhow::anyhow;
 use async_trait::async_trait;
@@ -54,10 +57,14 @@ pub enum MenuEvent {
 
 impl MenuEvent {
     pub async fn handle(self, bot: Bot, q: CallbackQuery, dialogue: MyDialogue) -> MyHandlerResult {
-        match self {
+        let bot_clone = bot.clone();
+        let q_id = q.id.clone();
+        let result = match self {
             MenuEvent::MainMenuEvent(event) => event.handle(bot, q, dialogue).await,
             MenuEvent::AccountMenuEvent(event) => event.handle(bot, q, dialogue).await,
-        }
+        };
+        bot_clone.answer_callback_query(q_id).await?;
+        result
     }
 
     pub fn schema() -> MyHandler {
@@ -98,15 +105,14 @@ impl Menu for MainMenuEvent {
         ]
     }
 
-    async fn handle(&self, bot: Bot, q: CallbackQuery, _dialogue: MyDialogue) -> MyHandlerResult {
+    async fn handle(&self, bot: Bot, q: CallbackQuery, dialogue: MyDialogue) -> MyHandlerResult {
         let original_message = q.message.ok_or(anyhow!("No message"))?;
-        let chat_id = original_message.chat.id;
         match self {
             Self::OpenAccountMenu => {
                 AccountMenuEvent::show_menu_in_message(bot, original_message).await?;
             }
             Self::OpenPurchaseMenu => {
-                bot.send_message(chat_id, "Purchase menu").await?;
+                PurchaseDialogueState::start(bot, dialogue, original_message).await?
             }
         }
         Ok(())
@@ -137,7 +143,13 @@ impl Menu for AccountMenuEvent {
                 LoginDialogueState::start(bot, dialogue, original_message).await?;
             }
             Self::Info => {
-                bot.send_message(chat_id, "Info menu").await?;
+                let repository = UserRepository::instance().await;
+                let Some(user) = repository.find_by_id(chat_id.into()).await? else {
+                    bot.send_message(chat_id, "You are not logged in").await?;
+                    return Ok(());
+                };
+                let message = format!("You are logged in as {}", user.username());
+                bot.send_message(chat_id, message).await?;
             }
             Self::Back => {
                 MainMenuEvent::show_menu_in_message(bot, original_message).await?;

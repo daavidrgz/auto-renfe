@@ -67,9 +67,10 @@ impl LoginDialogueState {
                 return Ok(());
             }
         };
-        // TODO: delete msg for password privacy
         bot.delete_message(chat_id, msg.id).await?;
-        let message = format!("You are logged in with username '{username}'. Password message has been deleted for privacy.");
+        let message = format!(
+            "You are logged in with username '{username}'. Password has been deleted for privacy."
+        );
         bot.send_message(chat_id, message).await?;
         dialogue.exit().await?;
 

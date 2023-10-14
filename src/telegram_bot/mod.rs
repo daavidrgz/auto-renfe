@@ -116,7 +116,7 @@ async fn cancel(bot: Bot, dialogue: MyDialogue, msg: Message) -> MyHandlerResult
 async fn invalid_state(bot: Bot, msg: Message) -> MyHandlerResult {
     bot.send_message(
         msg.chat.id,
-        "Unable to handle the message. Type /help to see the usage.",
+        "Unable to handle the message. Type /help to see the usage or /menu to see the menu.",
     )
     .await?;
     Ok(())

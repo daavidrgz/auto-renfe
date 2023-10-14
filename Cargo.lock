@@ -93,10 +93,12 @@ dependencies = [
  "derive_builder",
  "dotenvy",
  "dptree",
+ "edit-distance",
  "fantoccini",
  "futures",
  "log",
  "mongodb",
+ "once_cell",
  "pretty_env_logger",
  "serde",
  "serde_json",
@@ -447,6 +449,12 @@ checksum = "d81175dab5ec79c30e0576df2ed2c244e1721720c302000bb321b107e82e265c"
 dependencies = [
  "futures",
 ]
+
+[[package]]
+name = "edit-distance"
+version = "2.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "bbbaaaf38131deb9ca518a274a45bfdb8771f139517b073b16c2d3d32ae5037b"
 
 [[package]]
 name = "either"
